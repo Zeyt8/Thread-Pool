@@ -20,6 +20,8 @@ void add_task_in_queue(os_threadpool_t *tp, os_task_t *t)
     os_task_queue_t *node = (os_task_queue_t*)malloc(sizeof(os_task_queue_t));
     node->task = t;
     node->next = NULL;
+    // make adding to queue atomic
+    pthread_mutex_lock(&tp->taskLock);
     // If head is null set it to node
     if (tp->tasks == NULL) {
         tp->tasks = node;
@@ -31,18 +33,23 @@ void add_task_in_queue(os_threadpool_t *tp, os_task_t *t)
         }
         current->next = node;
     }
+    pthread_mutex_unlock(&tp->taskLock);
 }
 
 /* Get the head of task queue from threadpool */
 os_task_t *get_task(os_threadpool_t *tp)
 {
+    // make getting from queue atomic
+    pthread_mutex_lock(&tp->taskLock);
     os_task_queue_t *node = tp->tasks;
     // If head is null return null
     if (node == NULL) {
+        pthread_mutex_unlock(&tp->taskLock);
         return NULL;
     }
-    // Set head to next node
+    // Set head to the node next to the head
     tp->tasks = node->next;
+    pthread_mutex_unlock(&tp->taskLock);
     return node->task;
 }
 
@@ -78,10 +85,7 @@ void *thread_loop_function(void *args)
         if (tp->should_stop) {
             break;
         }
-        // Get task from queue
-        pthread_mutex_lock(&tp->taskLock);
         os_task_t *task = get_task(tp);
-        pthread_mutex_unlock(&tp->taskLock);
         // Run task
         if (task != NULL) {
             task->task(task->argument);
