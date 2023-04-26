@@ -22,9 +22,9 @@ void processNode(void *arg)
 {
     os_threadpool_t *tp = (os_threadpool_t*)arg;
     // pop node from queue
+    pthread_mutex_lock(&node_queue->lock);
     os_list_node_t *list_node = queue_get(node_queue);
-    if (list_node == NULL)
-        return;
+    pthread_mutex_unlock(&node_queue->lock);
     // get index and update sum
     unsigned int nodeIdx = *((int*)list_node->info);
     os_node_t *node = graph->nodes[nodeIdx];
@@ -42,13 +42,32 @@ void processNode(void *arg)
         pthread_mutex_unlock(&neighbor_mutex);
         // add node to queue and create task
         if (visited == 0) {
+            pthread_mutex_lock(&node_queue->lock);
             queue_add(node_queue, &node->neighbours[i]);
+            pthread_mutex_unlock(&node_queue->lock);
             os_task_t *task = task_create(tp, processNode);
             add_task_in_queue(tp, task);
         }
     }
     // mark node as complete
     graph->visited[nodeIdx] = 2;
+
+    // find other conex components by adding a random unvisited node to the queue
+    for (int i = 0; i < graph->nCount; i++) {
+        pthread_mutex_init(&neighbor_mutex, NULL);
+        int visited = graph->visited[i];
+        if (visited == 0)
+            graph->visited[i] = 1;
+        pthread_mutex_unlock(&neighbor_mutex);
+        if (visited == 0) {
+            pthread_mutex_lock(&node_queue->lock);
+            queue_add(node_queue, &graph->nodes[i]->nodeID);
+            pthread_mutex_unlock(&node_queue->lock);
+            os_task_t *task = task_create(tp, processNode);
+            add_task_in_queue(tp, task);
+            break;
+        }
+    }
 }
 
 int graphDone(os_threadpool_t* tp)
@@ -88,9 +107,8 @@ int main(int argc, char *argv[])
     os_threadpool_t *tp = threadpool_create(MAX_TASK, MAX_THREAD);
     // create queue and add first node
     node_queue = queue_create();
-    int start = graph->nodes[0]->nodeID;
-    graph->visited[start] = 1;
-    queue_add(node_queue, &start);
+    graph->visited[0] = 1;
+    queue_add(node_queue, &graph->nodes[0]->nodeID);
     // create task for first node and add it
     os_task_t *task = task_create(tp, processNode);
     add_task_in_queue(tp, task);
