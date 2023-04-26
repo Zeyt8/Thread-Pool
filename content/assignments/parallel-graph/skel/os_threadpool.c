@@ -1,0 +1,98 @@
+#include "os_threadpool.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include <unistd.h>
+
+/* === TASK === */
+
+/* Creates a task that thread must execute */
+os_task_t *task_create(void *arg, void (*f)(void *))
+{
+    os_task_t *task = (os_task_t*)malloc(sizeof(os_task_t));
+    task->argument = arg;
+    task->task = f;
+    return task;
+}
+
+/* Add a new task to threadpool task queue */
+void add_task_in_queue(os_threadpool_t *tp, os_task_t *t)
+{
+    os_task_queue_t *node = (os_task_queue_t*)malloc(sizeof(os_task_queue_t));
+    node->task = t;
+    node->next = NULL;
+    if (tp->tasks == NULL) {
+        tp->tasks = node;
+    } else {
+        os_task_queue_t *current = tp->tasks;
+        while (current->next != NULL) {
+            current = current->next;
+        }
+        current->next = node;
+    }
+}
+
+/* Get the head of task queue from threadpool */
+os_task_t *get_task(os_threadpool_t *tp)
+{
+    os_task_queue_t *node = tp->tasks;
+    if (node == NULL) {
+        return NULL;
+    }
+    tp->tasks = node->next;
+    return node->task;
+}
+
+/* === THREAD POOL === */
+
+/* Initialize the new threadpool */
+os_threadpool_t *threadpool_create(unsigned int nTasks, unsigned int nThreads)
+{
+    os_threadpool_t *tp = (os_threadpool_t*)malloc(sizeof(os_threadpool_t));
+    tp->should_stop = 0;
+    tp->num_threads = nThreads;
+    tp->threads = (pthread_t*)malloc(sizeof(pthread_t) * nThreads);
+    for (unsigned int i = 0; i < nThreads; i++) {
+        int result = pthread_create(&tp->threads[i], NULL, thread_loop_function, tp);
+        if (result != 0) {
+            printf("Failed to create thread.\n");
+        }
+    }
+    tp->tasks = NULL;
+    pthread_mutex_init(&tp->taskLock, NULL);
+    return tp;
+}
+
+/* Loop function for threads */
+void *thread_loop_function(void *args)
+{
+    os_threadpool_t *tp = (os_threadpool_t*)args;
+    while (1) {
+        if (tp->should_stop) {
+            break;
+        }
+        pthread_mutex_lock(&tp->taskLock);
+        os_task_t *task = get_task(tp);
+        pthread_mutex_unlock(&tp->taskLock);
+        if (task != NULL) {
+            task->task(task->argument);
+        }
+    }
+    return NULL;
+}
+
+/* Stop the thread pool once a condition is met */
+void threadpool_stop(os_threadpool_t *tp, int (*processingIsDone)(os_threadpool_t *))
+{
+    while (1) {
+        if (tp->tasks == NULL || processingIsDone(tp)) {
+            tp->should_stop = 1;
+            for (unsigned int i = 0; i < tp->num_threads; i++) {
+                int result = pthread_join(tp->threads[i], NULL);
+                if (result != 0) {
+                    printf("Failed to join thread.\n");
+                }
+            }
+            break;
+        }
+    }
+}
