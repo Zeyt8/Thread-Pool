@@ -14,6 +14,28 @@
 int sum = 0;
 os_graph_t *graph;
 
+os_threadpool_t *tp;
+
+void processNode(unsigned int nodeIdx)
+{
+    os_node_t *node = graph->nodes[nodeIdx];
+    sum += node->nodeInfo;
+    for (int i = 0; i < node->cNeighbours; i++)
+        if (graph->visited[node->neighbours[i]] == 0) {
+            graph->visited[node->neighbours[i]] = 1;
+            os_task_t *task = task_create(node->neighbours[i], processNode);
+            add_task_in_queue(tp, task);
+        }
+}
+
+int graphDone()
+{
+    for (int i = 0; i < graph->nCount; i++)
+        if (graph->visited[i] == 0)
+            return 0;
+    return 1;
+}
+
 int main(int argc, char *argv[])
 {
     if (argc != 2)
@@ -36,6 +58,10 @@ int main(int argc, char *argv[])
     }
 
     // TODO: create thread pool and traverse the graf
+    tp = threadpool_create(MAX_TASK, MAX_THREAD);
+    os_task_t *task = task_create(0, processNode);
+    add_task_in_queue(tp, task);
+    threadpool_stop(tp, graphDone);
 
     printf("%d", sum);
     return 0;
