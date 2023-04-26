@@ -95,7 +95,7 @@ void threadpool_stop(os_threadpool_t *tp, int (*processingIsDone)(os_threadpool_
 {
     while (1) {
         // Check if there are no more tasks and if processing is done
-        if (tp->tasks == NULL || processingIsDone(tp)) {
+        if (tp->tasks == NULL && processingIsDone(tp) == 1) {
             tp->should_stop = 1;
             // Join threads
             for (unsigned int i = 0; i < tp->num_threads; i++) {

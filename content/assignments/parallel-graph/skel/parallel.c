@@ -16,19 +16,20 @@ os_graph_t *graph;
 
 os_threadpool_t *tp;
 
-void processNode(unsigned int nodeIdx)
+void processNode(void *arg)
 {
+    unsigned int nodeIdx = *(unsigned int*)arg;
     os_node_t *node = graph->nodes[nodeIdx];
     sum += node->nodeInfo;
     for (int i = 0; i < node->cNeighbours; i++)
         if (graph->visited[node->neighbours[i]] == 0) {
             graph->visited[node->neighbours[i]] = 1;
-            os_task_t *task = task_create(node->neighbours[i], processNode);
+            os_task_t *task = task_create(&node->neighbours[i], processNode);
             add_task_in_queue(tp, task);
         }
 }
 
-int graphDone()
+int graphDone(os_threadpool_t* tp)
 {
     for (int i = 0; i < graph->nCount; i++)
         if (graph->visited[i] == 0)
@@ -57,9 +58,11 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    // TODO: create thread pool and traverse the graf
+    // create thread pool and traverse the graf
     tp = threadpool_create(MAX_TASK, MAX_THREAD);
-    os_task_t *task = task_create(0, processNode);
+    int start = graph->nodes[0]->nodeID;
+    graph->visited[start] = 1;
+    os_task_t *task = task_create(&start, processNode);
     add_task_in_queue(tp, task);
     threadpool_stop(tp, graphDone);
 
