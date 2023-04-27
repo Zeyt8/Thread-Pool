@@ -18,11 +18,9 @@ os_threadpool_t *tp;
 pthread_mutex_t sum_mutex;
 pthread_mutex_t neighbor_mutex;
 
-FILE* debug;
-
 void processNode(void *arg)
 {
-    unsigned int nodeIdx = *(int*)arg;
+    unsigned int nodeIdx = *(unsigned int*)arg;
     // get index and update sum
     os_node_t *node = graph->nodes[nodeIdx];
     // addition is not atomic
@@ -47,7 +45,7 @@ void processNode(void *arg)
     graph->visited[nodeIdx] = 2;
 
     // find other conex components by adding a random unvisited node to the queue
-    /*for (int i = 0; i < graph->nCount; i++) {
+    for (int i = 0; i < graph->nCount; i++) {
         pthread_mutex_lock(&neighbor_mutex);
         int visited = graph->visited[i];
         if (visited == 0)
@@ -58,26 +56,20 @@ void processNode(void *arg)
             add_task_in_queue(tp, task);
             break;
         }
-    }*/
+    }
 }
 
 int graphDone(os_threadpool_t* tp)
 {
     // graph is done if all the nodes are marked as complete
-    for (int i = 0; i < graph->nCount; i++) {
-        pthread_mutex_lock(&neighbor_mutex);
-        if (graph->visited[i] == 0 || graph->visited[i] == 1) {
-            pthread_mutex_unlock(&neighbor_mutex);
+    for (int i = 0; i < graph->nCount; i++)
+        if (graph->visited[i] == 0 || graph->visited[i] == 1)
             return 0;
-        }
-        pthread_mutex_unlock(&neighbor_mutex);
-    }
     return 1;
 }
 
 int main(int argc, char *argv[])
 {
-    debug = fopen("debug.txt", "w");
     if (argc != 2)
     {
         printf("Usage: ./main input_file\n");

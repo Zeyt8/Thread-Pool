@@ -49,8 +49,8 @@ os_task_t *get_task(os_threadpool_t *tp)
     }
     // Set head to the node next to the head
     tp->tasks = node->next;
-    pthread_mutex_unlock(&tp->taskLock);
     os_task_t *task = node->task;
+    pthread_mutex_unlock(&tp->taskLock);
     free(node);
     return task;
 }
@@ -64,6 +64,9 @@ os_threadpool_t *threadpool_create(unsigned int nTasks, unsigned int nThreads)
     os_threadpool_t *tp = (os_threadpool_t*)malloc(sizeof(os_threadpool_t));
     tp->should_stop = 0;
     tp->num_threads = nThreads;
+    tp->tasks = NULL;
+    // Initialize mutex
+    pthread_mutex_init(&tp->taskLock, NULL);
     // Create threads
     tp->threads = (pthread_t*)malloc(sizeof(pthread_t) * nThreads);
     for (unsigned int i = 0; i < nThreads; i++) {
@@ -72,9 +75,6 @@ os_threadpool_t *threadpool_create(unsigned int nTasks, unsigned int nThreads)
             printf("Failed to create thread.\n");
         }
     }
-    tp->tasks = NULL;
-    // Initialize mutex
-    pthread_mutex_init(&tp->taskLock, NULL);
     return tp;
 }
 
