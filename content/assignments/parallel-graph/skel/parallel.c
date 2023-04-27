@@ -54,7 +54,7 @@ void processNode(void *arg)
 
     // find other conex components by adding a random unvisited node to the queue
     for (int i = 0; i < graph->nCount; i++) {
-        pthread_mutex_init(&neighbor_mutex, NULL);
+        pthread_mutex_lock(&neighbor_mutex);
         int visited = graph->visited[i];
         if (visited == 0)
             graph->visited[i] = 1;
@@ -114,7 +114,9 @@ int main(int argc, char *argv[])
     add_task_in_queue(tp, task);
     // wait for all tasks to finish
     threadpool_stop(tp, graphDone);
-
+    free(tp);
+    free(graph);
+    free(node_queue);
     printf("%d", sum);
     return 0;
 }

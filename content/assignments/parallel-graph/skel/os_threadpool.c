@@ -50,7 +50,9 @@ os_task_t *get_task(os_threadpool_t *tp)
     // Set head to the node next to the head
     tp->tasks = node->next;
     pthread_mutex_unlock(&tp->taskLock);
-    return node->task;
+    os_task_t *task = node->task;
+    free(node);
+    return task;
 }
 
 /* === THREAD POOL === */
@@ -80,15 +82,12 @@ os_threadpool_t *threadpool_create(unsigned int nTasks, unsigned int nThreads)
 void *thread_loop_function(void *args)
 {
     os_threadpool_t *tp = (os_threadpool_t*)args;
-    while (1) {
-        // If threadpool should stop, break out of the loop
-        if (tp->should_stop) {
-            break;
-        }
+    while (tp->should_stop == 0) {
         os_task_t *task = get_task(tp);
         // Run task
         if (task != NULL) {
             task->task(task->argument);
+            free(task);
         }
     }
     return NULL;
