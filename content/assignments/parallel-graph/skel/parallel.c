@@ -27,7 +27,7 @@ void processNode(void *arg)
     pthread_mutex_lock(&sum_mutex);
     sum += node->nodeInfo;
     pthread_mutex_unlock(&sum_mutex);
-    // for each unvisited neighbor add it to the node queue and start a new task
+    // for each unvisited neighbor start a new task
     for (int i = 0; i < node->cNeighbours; i++) {
         // this is not atomic. mark node as visited, but not complete
         pthread_mutex_lock(&neighbor_mutex);
@@ -35,7 +35,7 @@ void processNode(void *arg)
         if (visited == 0)
             graph->visited[node->neighbours[i]] = 1;
         pthread_mutex_unlock(&neighbor_mutex);
-        // add node to queue and create task
+        // create task
         if (visited == 0) {
             os_task_t *task = task_create(&node->neighbours[i], processNode);
             add_task_in_queue(tp, task);
@@ -44,7 +44,7 @@ void processNode(void *arg)
     // mark node as complete
     graph->visited[nodeIdx] = 2;
 
-    // find other conex components by adding a random unvisited node to the queue
+    // find other conex components by starting a new task for a random unvisited node
     for (int i = 0; i < graph->nCount; i++) {
         pthread_mutex_lock(&neighbor_mutex);
         int visited = graph->visited[i];
