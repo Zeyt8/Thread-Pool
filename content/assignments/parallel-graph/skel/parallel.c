@@ -13,20 +13,17 @@
 
 int sum = 0;
 os_graph_t *graph;
+os_threadpool_t *tp;
 
-os_queue_t *node_queue;
 pthread_mutex_t sum_mutex;
 pthread_mutex_t neighbor_mutex;
 
+FILE* debug;
+
 void processNode(void *arg)
 {
-    os_threadpool_t *tp = (os_threadpool_t*)arg;
-    // pop node from queue
-    pthread_mutex_lock(&node_queue->lock);
-    os_list_node_t *list_node = queue_get(node_queue);
-    pthread_mutex_unlock(&node_queue->lock);
+    unsigned int nodeIdx = *(int*)arg;
     // get index and update sum
-    unsigned int nodeIdx = *((int*)list_node->info);
     os_node_t *node = graph->nodes[nodeIdx];
     // addition is not atomic
     pthread_mutex_lock(&sum_mutex);
@@ -42,10 +39,7 @@ void processNode(void *arg)
         pthread_mutex_unlock(&neighbor_mutex);
         // add node to queue and create task
         if (visited == 0) {
-            pthread_mutex_lock(&node_queue->lock);
-            queue_add(node_queue, &node->neighbours[i]);
-            pthread_mutex_unlock(&node_queue->lock);
-            os_task_t *task = task_create(tp, processNode);
+            os_task_t *task = task_create(&node->neighbours[i], processNode);
             add_task_in_queue(tp, task);
         }
     }
@@ -53,34 +47,37 @@ void processNode(void *arg)
     graph->visited[nodeIdx] = 2;
 
     // find other conex components by adding a random unvisited node to the queue
-    for (int i = 0; i < graph->nCount; i++) {
+    /*for (int i = 0; i < graph->nCount; i++) {
         pthread_mutex_lock(&neighbor_mutex);
         int visited = graph->visited[i];
         if (visited == 0)
             graph->visited[i] = 1;
         pthread_mutex_unlock(&neighbor_mutex);
         if (visited == 0) {
-            pthread_mutex_lock(&node_queue->lock);
-            queue_add(node_queue, &graph->nodes[i]->nodeID);
-            pthread_mutex_unlock(&node_queue->lock);
-            os_task_t *task = task_create(tp, processNode);
+            os_task_t *task = task_create(&graph->nodes[i]->nodeID, processNode);
             add_task_in_queue(tp, task);
             break;
         }
-    }
+    }*/
 }
 
 int graphDone(os_threadpool_t* tp)
 {
     // graph is done if all the nodes are marked as complete
-    for (int i = 0; i < graph->nCount; i++)
-        if (graph->visited[i] == 0 || graph->visited[i] == 1)
+    for (int i = 0; i < graph->nCount; i++) {
+        pthread_mutex_lock(&neighbor_mutex);
+        if (graph->visited[i] == 0 || graph->visited[i] == 1) {
+            pthread_mutex_unlock(&neighbor_mutex);
             return 0;
+        }
+        pthread_mutex_unlock(&neighbor_mutex);
+    }
     return 1;
 }
 
 int main(int argc, char *argv[])
 {
+    debug = fopen("debug.txt", "w");
     if (argc != 2)
     {
         printf("Usage: ./main input_file\n");
@@ -104,19 +101,13 @@ int main(int argc, char *argv[])
     pthread_mutex_init(&sum_mutex, NULL);
     pthread_mutex_init(&neighbor_mutex, NULL);
     // create thread pool
-    os_threadpool_t *tp = threadpool_create(MAX_TASK, MAX_THREAD);
-    // create queue and add first node
-    node_queue = queue_create();
+    tp = threadpool_create(MAX_TASK, MAX_THREAD);
     graph->visited[0] = 1;
-    queue_add(node_queue, &graph->nodes[0]->nodeID);
     // create task for first node and add it
-    os_task_t *task = task_create(tp, processNode);
+    os_task_t *task = task_create(&graph->nodes[0]->nodeID, processNode);
     add_task_in_queue(tp, task);
     // wait for all tasks to finish
     threadpool_stop(tp, graphDone);
-    free(tp);
-    free(graph);
-    free(node_queue);
     printf("%d", sum);
     return 0;
 }
